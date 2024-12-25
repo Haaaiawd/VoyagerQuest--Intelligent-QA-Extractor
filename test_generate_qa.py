@@ -1,5 +1,6 @@
 import unittest
-from generate_qa import read_txt_file, split_text, call_volcano_api, generate_qa_pairs
+from generate_qa import read_txt_file, split_text, call_spark_api, generate_qa_pairs
+import config
 
 class TestGenerateQA(unittest.TestCase):
 
@@ -15,8 +16,8 @@ class TestGenerateQA(unittest.TestCase):
         self.assertEqual(len(chunks[1]), 2000)
         self.assertEqual(len(chunks[2]), 1000)
 
-    def test_call_volcano_api(self):
-        response = call_volcano_api("This is a test chunk.")
+    def test_call_spark_api(self):
+        response = call_spark_api("这是一个测试文本。", config.API_KEY)
         self.assertTrue(len(response) > 0)
 
     def test_generate_qa_pairs(self):
