@@ -30,7 +30,7 @@ def split_text(text, chunk_size=2000):
 def call_spark_api(text_chunk):
     """调用星火API生成QA对"""
     prompt = (
-        "你是一个信息抽取能手，你需要把我给你的内容做成QA对，模拟人和大模型的对话。你必须严格按照以下JSON格式返回：\n"
+        "你是一个信息抽取能手，你需要把我给你的内容做成QA对，模拟人和大模型的对话。请严格按照以下JSON格式返回，不要返回其他任何内容：\n"
         "[\n"
         "    {\n"
         "        \"instruction\": \"问题1\",\n"
@@ -39,8 +39,9 @@ def call_spark_api(text_chunk):
         "    }\n"
         "]\n\n"
         "要求：\n"
-        "1. 全部使用中文回复\n"
-        "2. 内容分类：\n"
+        "1. 必须返回正确的JSON格式\n"
+        "2. 全部使用中文回复\n"
+        "3. 内容分类：\n"
         "   - 起卦方法：求卦人信息、数字处理规则、解卦结合\n"
         "   - 卦象分析：卦象特点、象征意义、方位/数字/时间属性\n"
         "   - 体用关系和断卦逻辑：分类处理、关系分析、外应考量、应验期\n"
@@ -52,36 +53,54 @@ def call_spark_api(text_chunk):
         "   - 不遗漏任何一个符合提取内容的QA对，如果字数到上限可简化Q和A来保证不遗漏应当被提取的QA对\n"
         "   - 不提及作者信息和前言后传\n"
         "   - 重点关注卜卦流程\n"
+        "   - 请直接返回JSON数组，不要加入任何其他说明文字。"
     )
     
     try:
         logger.info(f"Calling Spark API with text chunk: {text_chunk[:50]}...")
         response = client.chat(messages=[{"role": "user", "content": f"{prompt}\n\n{text_chunk}"}])
         
-        # 验证返回的JSON格式
+        # 尝试从响应中提取JSON
         try:
-            qa_list = json.loads(response)
+            # 尝试直接解析
+            try:
+                qa_list = json.loads(response)
+            except json.JSONDecodeError:
+                # 如果直接解析失败，尝试查找JSON数组的开始和结束位置
+                start_index = response.find('[')
+                end_index = response.rfind(']') + 1
+                if start_index != -1 and end_index != 0:
+                    json_str = response[start_index:end_index]
+                    qa_list = json.loads(json_str)
+                else:
+                    raise ValueError("无法在响应中找到有效的JSON数组")
+
+            # 验证格式
             if not isinstance(qa_list, list):
                 raise ValueError("返回结果必须是JSON数组")
             
-            # 验证每个QA对的格式
+            # 验证和修正每个QA对
             for qa in qa_list:
                 if not all(k in qa for k in ("instruction", "output", "system")):
                     raise ValueError("QA对缺少必要字段")
-                if qa["system"] != "你是一个占卜和算命解释专家，你需要遵循文本标准来帮我解决相关问题":
-                    qa["system"] = "你是一个占卜和算命解释专家，你需要遵循文本标准来帮我解决相关问题"
+                qa["system"] = "你是精通梅花易数大师，面对用户的需求，首先分析应该采用的起卦方法，其次根据计算得出相应的卦象，最后根据卦象分析输出对用户的预测和建议"
             
             # 重新序列化为字符串
-            response = json.dumps(qa_list, ensure_ascii=False)
+            return json.dumps(qa_list, ensure_ascii=False)
             
-        except json.JSONDecodeError:
-            logger.error("API返回的不是有效的JSON格式")
-            raise
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"JSON处理错误: {str(e)}")
+            logger.error(f"原始响应: {response}")
+            # 创建一个包含错误信息的QA对
+            qa_list = [{
+                "instruction": "处理失败",
+                "output": f"无法从API响应中提取有效的JSON: {str(e)}",
+                "system": "你是精通梅花易数大师，面对用户的需求，首先分析应该采用的起卦方法，其次根据计算得出相应的卦象，最后根据卦象分析输出对用户的预测和建议"
+            }]
+            return json.dumps(qa_list, ensure_ascii=False)
         
-        logger.info(f"Received and validated response: {response[:100]}...")
-        return response
     except Exception as e:
-        logger.error(f"API call failed: {e}")
+        logger.error(f"API调用失败: {str(e)}")
         raise
 
 def save_text_chunks(chunks, output_folder):
