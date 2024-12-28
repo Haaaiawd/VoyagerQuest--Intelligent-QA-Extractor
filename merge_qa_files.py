@@ -42,7 +42,7 @@ def merge_qa_files(input_folder, output_file):
 
 def main():
     # 设置输入输出路径
-    input_folder = r"G:\see\output1"  # 包含success*.json文件的文件夹
+    input_folder = r"G:\see\output4"  # 包含success*.json文件的文件夹
     output_file = os.path.join(input_folder, "merged_qa_pairs.json")
 
     # 检查输入目录是否存在
